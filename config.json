@@ -1,6 +1,6 @@
 {
   "repos": [
-    "owner/repo-name"
+    "markhughes321/gthub-server"
   ],
   "pollIntervalSeconds": 300,
   "reviewModel": "sonnet",
