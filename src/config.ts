@@ -29,7 +29,7 @@ export function loadConfig(): Config {
   const defaults: Config = {
     repos: [],
     pollIntervalSeconds: 300,
-    reviewModel: "sonnet",
+    reviewModel: "claude-opus-4-6",
     maxBudgetUsd: 0.5,
     confidenceThreshold: 80,
     postCommentToPr: false,
