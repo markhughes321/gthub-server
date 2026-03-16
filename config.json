@@ -3,7 +3,7 @@
     "markhughes321/gthub-server"
   ],
   "pollIntervalSeconds": 300,
-  "reviewModel": "sonnet",
+  "reviewModel": "claude-opus-4-6",
   "maxBudgetUsd": 0.50,
   "confidenceThreshold": 80,
   "postCommentToPr": false,

@@ -101,6 +101,8 @@ export async function reviewPR(
         config.reviewModel,
         "--output-format",
         "text",
+        "--max-turns",
+        "1",
       ],
       {
         maxBuffer: 50 * 1024 * 1024,
