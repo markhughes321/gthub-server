@@ -1,0 +1,22 @@
+{
+  "name": "gthub-server",
+  "version": "1.0.0",
+  "description": "Automated GitHub PR code review system using Claude Code",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "review": "tsx src/review-cli.ts"
+  },
+  "dependencies": {
+    "node-notifier": "^10.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/node-notifier": "^8.0.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "repos": [
+    "owner/repo-name"
+  ],
+  "pollIntervalSeconds": 300,
+  "reviewModel": "sonnet",
+  "maxBudgetUsd": 0.50,
+  "confidenceThreshold": 80,
+  "postCommentToPr": false,
+  "notify": true
+}
