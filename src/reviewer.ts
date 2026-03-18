@@ -253,7 +253,7 @@ function buildIncrementalPrompt(
 
   const diffText = diffSinceLastReview.trim().length > 0
     ? diffSinceLastReview.slice(0, 40_000) // cap very large diffs
-    : "(diff unavailable — perform a full review)";
+    : "(no diff — PR is unchanged since the last review. Do NOT spawn agents or re-run tests. Simply state that no new changes were found and the previous review still stands.)";
 
   return [
     `IMPORTANT: The following Step 1 tasks are already complete — do NOT repeat them:`,

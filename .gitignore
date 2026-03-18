@@ -1,6 +1,7 @@
 node_modules/
 dist/
-state/reviewed.json
-reviews/
+worktrees/
 logs/
-*.log
+reviews/
+state/
+*.env.local

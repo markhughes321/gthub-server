@@ -11,9 +11,9 @@
   "teamReviewThreshold": 10,
   "reviewTimeoutMinutes": 15,
   "parallelReviews": false,
-  "maxConcurrentReviews": 3,
+  "maxConcurrentReviews": 1,
   "skillMap": {
-    "API": "api-500-hunter",
+    "API": "pr-review",
     "UI": "pr-review",
     "INFRA": "pr-review",
     "MIXED": "pr-review-team"
