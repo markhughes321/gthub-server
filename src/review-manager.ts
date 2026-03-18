@@ -34,6 +34,7 @@ export interface ReviewInfo {
 interface ManagedReview extends ReviewInfo {
   chunks: string[];
   proc?: ChildProcess;
+  worktreePath?: string;
   subscribers: Set<(chunk: string) => void>;
   doneCallbacks: Set<(status: string) => void>;
 }
@@ -52,15 +53,20 @@ function pruneOldReviews(): void {
   }
 }
 
-export function registerReview(info: ReviewInfo, proc: ChildProcess): void {
+export function registerReview(info: ReviewInfo, proc: ChildProcess, worktreePath?: string): void {
   reviews.set(info.id, {
     ...info,
     chunks: [],
     proc,
+    worktreePath,
     subscribers: new Set(),
     doneCallbacks: new Set(),
   });
   pruneOldReviews();
+}
+
+export function getWorktreePath(id: string): string | null {
+  return reviews.get(id)?.worktreePath ?? null;
 }
 
 // updateProc removed — registerReview now always receives the real proc
@@ -148,14 +154,14 @@ export function dismissReview(id: string): boolean {
 
 export function getAll(): ReviewInfo[] {
   return Array.from(reviews.values())
-    .map(({ chunks, proc, subscribers, doneCallbacks, ...info }) => info)
+    .map(({ chunks, proc, worktreePath, subscribers, doneCallbacks, ...info }) => info)
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 }
 
 export function get(id: string): { info: ReviewInfo; chunks: string[] } | null {
   const review = reviews.get(id);
   if (!review) return null;
-  const { proc, subscribers, doneCallbacks, chunks, ...info } = review;
+  const { proc, worktreePath, subscribers, doneCallbacks, chunks, ...info } = review;
   return { info, chunks: [...chunks] };
 }
 

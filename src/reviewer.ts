@@ -214,6 +214,13 @@ function buildPrompt(
     `Do NOT cd to any other path. Do NOT use the "Known Local Repos" path listed in the skill —`,
     `you are already there (in an isolated worktree at the right commit).`,
     ``,
+    `## User messages during review`,
+    `At key checkpoints (after spawning agents, after receiving agent results, before writing your`,
+    `final review), attempt to Read the file \`.revue-message.txt\` in your current working directory.`,
+    `If it exists and contains text, output "── USER MESSAGE ──" followed by the content, respond`,
+    `to the question, then use the Write tool to clear the file (write empty string ""), and continue.`,
+    `If the file does not exist, proceed normally — a Read error simply means no message was sent.`,
+    ``,
     `## Pre-completed Step 1 tasks — do NOT repeat any of these`,
     `- Step 1.1: PR metadata pre-fetched below — do NOT run "gh pr view"`,
     `- Step 1.2: Changed file list pre-fetched below — do NOT run "gh pr diff --name-only"`,
@@ -275,6 +282,13 @@ function buildIncrementalPrompt(
     `  Do NOT run git fetch, git stash, git checkout, or git stash pop.`,
     `- Step 1.5: PR type pre-classified below`,
     `- Step 6 (cleanup): Handled automatically — do NOT remove the worktree`,
+    ``,
+    `## User messages during review`,
+    `At key checkpoints (after spawning agents, after receiving agent results, before writing your`,
+    `final review), attempt to Read the file \`.revue-message.txt\` in your current working directory.`,
+    `If it exists and contains text, output "── USER MESSAGE ──" followed by the content, respond`,
+    `to the question, then use the Write tool to clear the file (write empty string ""), and continue.`,
+    `If the file does not exist, proceed normally — a Read error simply means no message was sent.`,
     ``,
     `## RE-REVIEW MODE — This PR was previously reviewed. New commits have been pushed.`,
     ``,
@@ -502,7 +516,8 @@ export async function reviewPR(
       reviewPath: `reviews/${safeRepoName(repo)}/PR-${pr.number}/review-${ts}.md`,
       status: "running",
     },
-    proc
+    proc,
+    reviewCwd
   );
 
   try {

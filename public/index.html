@@ -106,6 +106,27 @@
     }
     .stop-btn:hover { background: rgba(248,81,73,0.22); }
     .stop-btn:disabled { opacity: 0.45; cursor: default; }
+
+    /* ── Message bar (running reviews) ── */
+    .msg-bar {
+      padding: 6px 12px; border-bottom: 1px solid var(--border);
+      display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+    }
+    .msg-input {
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px; padding: 5px 10px;
+      font-size: 12px; outline: none; font-family: inherit;
+    }
+    .msg-input:focus { border-color: var(--accent); }
+    .msg-input::placeholder { color: var(--muted); }
+    .msg-btn {
+      padding: 5px 14px; flex-shrink: 0;
+      background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3);
+      color: var(--success); border-radius: 6px; font-size: 12px;
+      font-weight: 500; cursor: pointer;
+    }
+    .msg-btn:hover { background: rgba(63,185,80,0.2); }
+    .msg-btn:disabled { opacity: 0.45; cursor: default; }
     .retry-btn {
       padding: 5px 14px; flex-shrink: 0;
       background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3);
@@ -766,12 +787,39 @@
           </div>
           <button class="stop-btn" id="stop-btn">Stop Review</button>
         </div>
+        <div class="msg-bar">
+          <input class="msg-input" id="msg-input" type="text" placeholder="Ask Claude what it&apos;s doing… (processed at next checkpoint)" />
+          <button class="msg-btn" id="msg-btn">Ask</button>
+        </div>
         <div class="output-wrap" id="output-wrap"><pre class="output" id="output"></pre></div>`;
 
       document.getElementById('stop-btn')
         .addEventListener('click', () => stopReview(review.id));
+      document.getElementById('msg-btn')
+        .addEventListener('click', () => sendMessage(review.id));
+      document.getElementById('msg-input')
+        .addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(review.id); });
       startElapsedTimer(review.startedAt);
       openStream(review.id);
+    }
+
+    async function sendMessage(id) {
+      const input = document.getElementById('msg-input');
+      const btn = document.getElementById('msg-btn');
+      if (!input || !btn) return;
+      const text = input.value.trim();
+      if (!text) return;
+      btn.disabled = true;
+      btn.textContent = 'Sent ✓';
+      input.value = '';
+      try {
+        await fetch(`/api/reviews/${encodeURIComponent(id)}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text }),
+        });
+      } catch { /* best-effort */ }
+      setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = 'Ask'; } }, 3000);
     }
 
     function openStream(id) {

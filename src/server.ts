@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { execFile } from "child_process";
 import { createHmac, timingSafeEqual } from "crypto";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
 import { readdir, readFile, writeFile } from "fs/promises";
 import { join, dirname, basename, resolve as resolvePath } from "path";
 import { fileURLToPath } from "url";
@@ -199,6 +199,32 @@ export function startServer(port: number): void {
       const absPath = join(getProjectRoot(), relPath);
       if (!existsSync(absPath)) return send(res, 404, "text/plain", "Not found");
       return send(res, 200, "text/plain; charset=utf-8", readFileSync(absPath, "utf-8"));
+    }
+
+    // POST /api/reviews/:id/message — send a user message to a running review via file drop
+    const messageMatch = path.match(/^\/api\/reviews\/([^/]+)\/message$/);
+    if (method === "POST" && messageMatch) {
+      const id = decodeURIComponent(messageMatch[1]);
+      const data = manager.get(id);
+      if (!data || data.info.status !== "running") {
+        return send(res, 400, "application/json", JSON.stringify({ error: "Review not running" }));
+      }
+      const worktreePath = manager.getWorktreePath(id);
+      if (!worktreePath) {
+        return send(res, 400, "application/json", JSON.stringify({ error: "No worktree for this review" }));
+      }
+      const rawBody = await readBody(req);
+      let message: string;
+      try {
+        const parsed = JSON.parse(rawBody);
+        if (!parsed.message || typeof parsed.message !== "string") throw new Error();
+        message = parsed.message.trim();
+      } catch {
+        return send(res, 400, "application/json", JSON.stringify({ error: "Invalid message body" }));
+      }
+      if (!message) return send(res, 400, "application/json", JSON.stringify({ error: "Empty message" }));
+      writeFileSync(join(worktreePath, ".revue-message.txt"), message, "utf-8");
+      return send(res, 202, "application/json", JSON.stringify({ ok: true }));
     }
 
     // DELETE /api/reviews/:id — kill

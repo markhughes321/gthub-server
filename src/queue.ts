@@ -20,6 +20,7 @@ export class ReviewQueue {
   private readonly maxConcurrent: number;
   private activeCount = 0;
   private readonly pendingEntries: PendingEntry[] = [];
+  private readonly activeKeys = new Set<string>();
 
   constructor(maxConcurrent: number) {
     this.maxConcurrent = Math.max(1, maxConcurrent);
@@ -32,19 +33,27 @@ export class ReviewQueue {
   }
 
   enqueue(task: Task, meta?: QueueItemMeta): void {
+    if (meta) {
+      const key = `${meta.repo}#${meta.prNumber}`;
+      const alreadyPending = this.pendingEntries.some(e => e.meta && `${e.meta.repo}#${e.meta.prNumber}` === key);
+      if (alreadyPending || this.activeKeys.has(key)) return;
+    }
     if (this.activeCount < this.maxConcurrent) {
-      this.run(task);
+      this.run(task, meta);
     } else {
       this.pendingEntries.push({ task, meta });
     }
   }
 
-  private run(task: Task): void {
+  private run(task: Task, meta?: QueueItemMeta): void {
     this.activeCount++;
+    const key = meta ? `${meta.repo}#${meta.prNumber}` : undefined;
+    if (key) this.activeKeys.add(key);
     task().finally(() => {
       this.activeCount--;
+      if (key) this.activeKeys.delete(key);
       const next = this.pendingEntries.shift();
-      if (next) this.run(next.task);
+      if (next) this.run(next.task, next.meta);
     });
   }
 }
