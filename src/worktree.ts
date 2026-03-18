@@ -58,7 +58,8 @@ export async function createWorktree(
   const sha7 = headSha.slice(0, 7);
   const worktreePath = join(projectRoot, "worktrees", `PR-${prNumber}-${sha7}`);
 
-  // Remove any leftover worktree from a previous crash
+  // Remove any leftover worktree from a previous crash — including the case
+  // where the directory was deleted externally but git's metadata is still locked.
   if (existsSync(worktreePath)) {
     console.warn(`[worktree] Stale worktree found at ${worktreePath} — removing`);
     try {
@@ -67,6 +68,11 @@ export async function createWorktree(
       // If git worktree remove fails (e.g. not registered), just proceed —
       // git worktree add will error clearly if the dir is truly in the way
     }
+  } else {
+    // Directory missing but git metadata may still hold a locked entry.
+    // Unlock (ignoring failure if not locked) then prune to clear stale refs.
+    try { await git(["worktree", "unlock", worktreePath], localRepoPath); } catch { /* not locked */ }
+    try { await git(["worktree", "prune"], localRepoPath); } catch { /* best effort */ }
   }
 
   // Fetch by branch name — the repo's refspec only covers named branches,
