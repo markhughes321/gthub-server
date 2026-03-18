@@ -36,7 +36,12 @@ async function poll(): Promise<void> {
       });
 
       for (const pr of prsToReview) {
-        queue.enqueue(() => reviewPR(config, pr, repo).then(() => {}));
+        queue.enqueue(() => reviewPR(config, pr, repo).then(() => {}), {
+          repo,
+          prNumber: pr.number,
+          title: pr.title,
+          url: pr.url,
+        });
       }
     } catch (error) {
       const errMsg =

@@ -54,7 +54,9 @@
       width: 260px; flex-shrink: 0;
       border-right: 1px solid var(--border);
       overflow-y: auto; background: var(--surface);
+      scrollbar-width: none;
     }
+    .sidebar::-webkit-scrollbar { display: none; }
     .section-label {
       font-size: 10px; font-weight: 700; color: var(--muted);
       text-transform: uppercase; letter-spacing: 0.1em;
@@ -112,6 +114,20 @@
     }
     .retry-btn:hover { background: rgba(88,166,255,0.2); }
     .retry-btn:disabled { opacity: 0.45; cursor: default; }
+    .skill-select {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px; padding: 4px 8px;
+      font-size: 12px; cursor: pointer; outline: none; font-family: inherit;
+      flex-shrink: 0;
+    }
+    .skill-select:focus { border-color: var(--accent); }
+    .dismiss-btn {
+      padding: 4px 8px; flex-shrink: 0;
+      background: transparent; border: 1px solid rgba(139,148,158,0.25);
+      color: var(--muted); border-radius: 6px; font-size: 12px;
+      cursor: pointer; line-height: 1;
+    }
+    .dismiss-btn:hover { background: rgba(248,81,73,0.12); border-color: rgba(248,81,73,0.4); color: #f85149; }
 
     /* ── Live stream (running reviews) ── */
     .output-wrap { flex: 1; overflow-y: auto; position: relative; scrollbar-width: none; }
@@ -509,7 +525,12 @@
         <div class="filter-pills" id="filter-type-pills"></div>
         <div class="filter-count" id="filter-count"></div>
       </div>
-      <div id="sidebar-list" style="flex:1;overflow-y:auto"></div>
+      <div id="sidebar-list" style="flex:1;overflow-y:auto;scrollbar-width:none"></div>
+      <div id="sidebar-bottom" style="border-top:1px solid var(--border);flex-shrink:0">
+        <div class="cf-nav-item" id="cf-nav">
+          <span>📁</span><span class="cf-nav-title">Claude Files</span>
+        </div>
+      </div>
     </div>
     <div class="content" id="content">
       <div class="empty">Select a review to see its output</div>
@@ -518,6 +539,7 @@
 
   <script>
     let reviews = [];
+    let queuedItems = [];
     let selectedId = null;
     let activeEs = null;
     let elapsedTimer = null;
@@ -601,6 +623,7 @@
         ]);
         reviews = await reviewsRes.json();
         const queueData = queueRes?.ok ? await queueRes.json() : null;
+        queuedItems = queueData?.items ?? [];
         renderSidebar();
         updateBadges(queueData);
       } catch {}
@@ -629,12 +652,29 @@
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
 
+    function queueItem(item, index) {
+      const repo = (item.repo || '').split('/')[1] || item.repo || '';
+      const title = item.title || `PR #${item.prNumber}`;
+      return `
+        <div class="review-item" style="cursor:default">
+          <div class="item-title">
+            <span class="dot" style="background:var(--muted);opacity:0.5"></span>
+            <span style="color:var(--muted)">${esc(title)}</span>
+          </div>
+          <div class="item-meta">${esc(repo)}#${item.prNumber} &middot; position ${index + 1} in queue</div>
+        </div>`;
+    }
+
     function renderSidebarList() {
       const filtered = applyFilters(reviews);
       const running  = filtered.filter(r => r.status === 'running');
       const complete = filtered.filter(r => r.status === 'complete');
       const killed   = filtered.filter(r => r.status === 'killed' || r.status === 'failed');
       let html = '';
+      if (queuedItems.length) {
+        html += `<div class="section-label">Queued (${queuedItems.length})</div>`;
+        queuedItems.forEach((item, i) => html += queueItem(item, i));
+      }
       if (running.length) {
         html += `<div class="section-label">Active</div>`;
         running.forEach(r => html += reviewItem(r));
@@ -647,22 +687,15 @@
         html += `<div class="section-label">Killed / Failed</div>`;
         killed.forEach(r => html += reviewItem(r));
       }
-      if (!running.length && !complete.length && !killed.length && reviews.length) {
+      if (!queuedItems.length && !running.length && !complete.length && !killed.length && reviews.length) {
         html += `<div style="padding:16px 12px;color:var(--muted);font-size:12px">No results</div>`;
       }
-      const cfSel = currentView === 'claude-files' ? ' selected' : '';
-      html += `
-        <div style="border-top:1px solid var(--border);margin-top:8px">
-          <div class="section-label" style="padding-top:10px">Project</div>
-          <div class="cf-nav-item${cfSel}" id="cf-nav">
-            <span>📁</span><span class="cf-nav-title">Claude Files</span>
-          </div>
-        </div>`;
       document.getElementById('sidebar-list').innerHTML = html;
       document.querySelectorAll('.review-item').forEach(el => {
         el.addEventListener('click', () => selectReview(el.dataset.id));
       });
-      document.getElementById('cf-nav')?.addEventListener('click', selectClaudeFiles);
+      const cfNav = document.getElementById('cf-nav');
+      if (cfNav) cfNav.classList.toggle('selected', currentView === 'claude-files');
 
       // Update filter count
       const countEl = document.getElementById('filter-count');
@@ -799,7 +832,7 @@
     async function showCompletedView(review) {
       activeTab = 'review';
       const content = document.getElementById('content');
-      const isRetryable = review.status === 'killed' || review.status === 'failed';
+      const isRetryable = review.status !== 'running';
       const statusIcon = review.status === 'complete' ? '✓' :
                          review.status === 'failed'   ? '✗' : '⊘';
       const ghUrl = `https://github.com/${review.repo ?? ''}/pull/${review.prNumber ?? ''}/files`;
@@ -815,7 +848,14 @@
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <span style="font-size:11px;color:var(--muted)">${duration(review.startedAt, review.completedAt) ? `took ${duration(review.startedAt, review.completedAt)}` : esc(ago(review.startedAt ?? ''))}</span>
             <a class="gh-link" href="${esc(ghUrl)}" target="_blank" rel="noopener" title="Open PR on GitHub">${githubIcon()}</a>
-            ${isRetryable ? `<button class="retry-btn" id="retry-btn">↺ Re-run Review</button>` : ''}
+            ${isRetryable ? `
+              <select class="skill-select" id="skill-select" title="Skill to use for re-run">
+                <option value="">auto</option>
+                <option value="pr-review" ${esc(review.skill) === 'pr-review' ? 'selected' : ''}>pr-review</option>
+                <option value="pr-review-team" ${esc(review.skill) === 'pr-review-team' ? 'selected' : ''}>pr-review-team</option>
+              </select>
+              <button class="retry-btn" id="retry-btn">↺ Re-run</button>` : ''}
+            <button class="dismiss-btn" id="dismiss-btn" title="Hide this review (won't re-run)">✕</button>
           </div>
         </div>
         <div class="tab-bar">
@@ -828,6 +868,7 @@
         <div class="done-bar ${review.status}">${statusIcon} ${(review.status ?? '').toUpperCase()}</div>`;
 
       document.getElementById('retry-btn')?.addEventListener('click', () => retryReview(review.id));
+      document.getElementById('dismiss-btn')?.addEventListener('click', () => hideReviewUI(review.id, review.title));
 
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1081,14 +1122,37 @@
 
     async function retryReview(id) {
       const btn = document.getElementById('retry-btn');
+      const sel = document.getElementById('skill-select');
+      const skill = sel?.value || undefined;
       if (btn) { btn.disabled = true; btn.textContent = 'Queuing…'; }
-      const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/retry`, { method: 'POST' });
+      if (sel) sel.disabled = true;
+      const body = skill ? JSON.stringify({ skill }) : undefined;
+      const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/retry`, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body,
+      });
       if (res.ok) {
         // New review will appear via the 5s poll — just give feedback
         if (btn) { btn.textContent = 'Queued ✓'; }
         setTimeout(() => fetchReviews(), 1500);
       } else {
-        if (btn) { btn.disabled = false; btn.textContent = '↺ Re-run Review'; }
+        if (btn) { btn.disabled = false; btn.textContent = '↺ Re-run'; }
+        if (sel) sel.disabled = false;
+      }
+    }
+
+    async function hideReviewUI(id, title) {
+      const msg = `Hide this review?\n\n"${title ?? id}"\n\nIt won't reappear after restart, and the PR won't be re-reviewed unless new commits are pushed.`;
+      if (!confirm(msg)) return;
+      const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/hide`, { method: 'POST' });
+      if (res.ok) {
+        reviews = reviews.filter(r => r.id !== id);
+        if (selectedId === id) {
+          selectedId = null;
+          document.getElementById('content').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted)">Select a review</div>`;
+        }
+        renderSidebar();
       }
     }
 
@@ -1480,6 +1544,7 @@
     }
 
     initFilterBar();
+    document.getElementById('cf-nav')?.addEventListener('click', selectClaudeFiles);
     fetchReviews();
     setInterval(fetchReviews, 5000);
   </script>

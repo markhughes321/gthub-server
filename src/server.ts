@@ -7,7 +7,7 @@ import { join, dirname, basename, resolve as resolvePath } from "path";
 import { fileURLToPath } from "url";
 import { loadConfig, getProjectRoot } from "./config.js";
 import { listOpenPRs } from "./github.js";
-import { loadState, needsReview } from "./state.js";
+import { loadState, needsReview, hideReview } from "./state.js";
 import { reviewPR } from "./reviewer.js";
 import * as manager from "./review-manager.js";
 import { getQueue } from "./queue.js";
@@ -209,7 +209,22 @@ export function startServer(port: number): void {
       return send(res, killed ? 200 : 404, "application/json", JSON.stringify({ killed }));
     }
 
-    // POST /api/reviews/:id/retry — re-trigger a killed/failed review
+    // POST /api/reviews/:id/hide — hide a completed review from the dashboard
+    // The state entry (headSha) is preserved so the PR won't be re-reviewed
+    const hideMatch = path.match(/^\/api\/reviews\/([^/]+)\/hide$/);
+    if (method === "POST" && hideMatch) {
+      const id = decodeURIComponent(hideMatch[1]);
+      const data = manager.get(id);
+      if (!data || data.info.status === "running") {
+        return send(res, 400, "application/json", JSON.stringify({ error: "Cannot hide a running review" }));
+      }
+      const state = loadState();
+      hideReview(state, data.info.repo, data.info.prNumber);
+      manager.dismissReview(id);
+      return send(res, 200, "application/json", JSON.stringify({ hidden: true }));
+    }
+
+    // POST /api/reviews/:id/retry — re-trigger any non-running review, optionally with a skill override
     const retryMatch = path.match(/^\/api\/reviews\/([^/]+)\/retry$/);
     if (method === "POST" && retryMatch) {
       const id = decodeURIComponent(retryMatch[1]);
@@ -224,24 +239,36 @@ export function startServer(port: number): void {
       if (alreadyRunning) {
         return send(res, 409, "application/json", JSON.stringify({ error: "Review already running for this PR" }));
       }
+      const rawBody = await readBody(req);
+      let skillOverride: string | undefined;
+      try {
+        const parsed = JSON.parse(rawBody);
+        if (parsed.skill && typeof parsed.skill === "string") skillOverride = parsed.skill;
+      } catch { /* no body or non-JSON — use auto skill selection */ }
       const config = loadConfig();
-      getQueue().enqueue(() =>
-        listOpenPRs(repo)
-          .then((prs) => {
-            const pr = prs.find((p) => p.number === prNumber);
-            if (!pr) throw new Error(`PR #${prNumber} not found or closed`);
-            return reviewPR(config, pr, repo);
-          })
-          .then(() => {})
-          .catch((err) => console.error(`Retry failed for ${repo}#${prNumber}: ${err}`))
+      getQueue().enqueue(
+        () =>
+          listOpenPRs(repo)
+            .then((prs) => {
+              const pr = prs.find((p) => p.number === prNumber);
+              if (!pr) throw new Error(`PR #${prNumber} not found or closed`);
+              return reviewPR(config, pr, repo, skillOverride);
+            })
+            .then(() => {})
+            .catch((err) => console.error(`Retry failed for ${repo}#${prNumber}: ${err}`)),
+        { repo, prNumber, title: data.info.title, url: data.info.url }
       );
       return send(res, 202, "application/json", JSON.stringify({ queued: true }));
     }
 
-    // GET /api/queue — queue status
+    // GET /api/queue — queue status with pending items
     if (method === "GET" && path === "/api/queue") {
       const q = getQueue();
-      return send(res, 200, "application/json", JSON.stringify({ active: q.active, pending: q.pending }));
+      return send(res, 200, "application/json", JSON.stringify({
+        active: q.active,
+        pending: q.pending,
+        items: q.pendingItems,
+      }));
     }
 
     // POST /webhook — GitHub PR webhook
@@ -292,20 +319,22 @@ export function startServer(port: number): void {
       }
 
       // Check needsReview before triggering to avoid duplicate with poll
-      getQueue().enqueue(() =>
-        listOpenPRs(repo)
-          .then((prs) => {
-            const pr = prs.find((p) => p.number === prNumber);
-            if (!pr) return;
-            const state = loadState();
-            if (!needsReview(state, repo, prNumber, pr.headRefOid)) {
-              console.log(`[webhook] Skip ${repo}#${prNumber} — already reviewed at this SHA`);
-              return;
-            }
-            console.log(`[webhook] Triggering review for ${repo}#${prNumber} (action: ${action})`);
-            return reviewPR(config2, pr, repo).then(() => {});
-          })
-          .catch((err) => console.error(`[webhook] Error for ${repo}#${prNumber}: ${err}`))
+      getQueue().enqueue(
+        () =>
+          listOpenPRs(repo)
+            .then((prs) => {
+              const pr = prs.find((p) => p.number === prNumber);
+              if (!pr) return;
+              const state = loadState();
+              if (!needsReview(state, repo, prNumber, pr.headRefOid)) {
+                console.log(`[webhook] Skip ${repo}#${prNumber} — already reviewed at this SHA`);
+                return;
+              }
+              console.log(`[webhook] Triggering review for ${repo}#${prNumber} (action: ${action})`);
+              return reviewPR(config2, pr, repo).then(() => {});
+            })
+            .catch((err) => console.error(`[webhook] Error for ${repo}#${prNumber}: ${err}`)),
+        { repo, prNumber }
       );
 
       return send(res, 202, "application/json", JSON.stringify({ queued: true, repo, prNumber }));

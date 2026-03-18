@@ -142,6 +142,10 @@ export function subscribe(
   };
 }
 
+export function dismissReview(id: string): boolean {
+  return reviews.delete(id);
+}
+
 export function getAll(): ReviewInfo[] {
   return Array.from(reviews.values())
     .map(({ chunks, proc, subscribers, doneCallbacks, ...info }) => info)
@@ -166,7 +170,7 @@ export function loadHistoricalReviews(projectRoot: string): void {
   let state: {
     reviewed: Record<
       string,
-      { title: string; reviewedAt: string; reviewPath: string; status: string }
+      { title: string; reviewedAt: string; reviewPath: string; status: string; hidden?: boolean }
     >;
   };
 
@@ -178,6 +182,7 @@ export function loadHistoricalReviews(projectRoot: string): void {
 
   for (const [key, entry] of Object.entries(state.reviewed)) {
     if (!entry.reviewPath) continue;
+    if (entry.hidden) continue;
 
     // key format: "owner/repo#prNumber"
     const hashIdx = key.lastIndexOf("#");

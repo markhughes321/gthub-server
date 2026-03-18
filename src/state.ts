@@ -69,6 +69,19 @@ export function markReviewed(
   state.reviewed[key] = entry;
 }
 
+export function hideReview(
+  state: ReviewState,
+  repo: string,
+  prNumber: number
+): boolean {
+  const key = `${repo}#${prNumber}`;
+  const entry = state.reviewed[key];
+  if (!entry) return false;
+  entry.hidden = true;
+  saveState(state);
+  return true;
+}
+
 export function getPreviousReview(
   state: ReviewState,
   repo: string,

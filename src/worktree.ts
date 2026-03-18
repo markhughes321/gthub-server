@@ -91,6 +91,10 @@ export async function createWorktree(
   // user.json, supportTeam.json, sysadmin.json
   linkResource(localRepoPath, worktreePath, "playwright/.auth", "junction");
 
+  // .claude/scripts: junction — contains extract-swagger-endpoint.cjs and other
+  // helper scripts that are gitignored but required by the pr-review skill
+  linkResource(localRepoPath, worktreePath, ".claude/scripts", "junction");
+
   // .env.local: file copy (file symlinks require Developer Mode on Windows)
   linkResource(localRepoPath, worktreePath, ".env.local", "file-copy");
 

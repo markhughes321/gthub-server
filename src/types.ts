@@ -23,6 +23,7 @@ export interface ReviewedEntry {
   status: "complete" | "failed" | "killed";
   previousHeadSha?: string;
   previousReviewPath?: string;
+  hidden?: boolean;
 }
 
 export interface ReviewState {

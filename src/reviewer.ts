@@ -209,30 +209,36 @@ function buildPrompt(
     : "(file list unavailable — use gh pr diff --name-only to fetch)";
 
   return [
-    `IMPORTANT: The following Step 1 tasks are already complete — do NOT repeat them:`,
-    `- Step 1.3: The git worktree is checked out to the PR's exact commit (detached HEAD).`,
-    `  Do NOT run git checkout, git stash, or git stash pop.`,
-    `- Step 1.5: PR type is pre-classified below.`,
-    `- Step 6 (cleanup): Handled automatically — do NOT run git worktree remove.`,
+    `## Working directory`,
+    `Your current working directory is already the repository checked out at the PR's exact commit.`,
+    `Do NOT cd to any other path. Do NOT use the "Known Local Repos" path listed in the skill —`,
+    `you are already there (in an isolated worktree at the right commit).`,
     ``,
-    `Also: "gh pr view" will fail in this environment (no interactive auth).`,
-    `The PR metadata is pre-fetched below — use it directly and skip that call.`,
+    `## Pre-completed Step 1 tasks — do NOT repeat any of these`,
+    `- Step 1.1: PR metadata pre-fetched below — do NOT run "gh pr view"`,
+    `- Step 1.2: Changed file list pre-fetched below — do NOT run "gh pr diff --name-only"`,
+    `- Step 1.3: Already at the repo directory (current working directory)`,
+    `- Step 1.4: Already checked out to the PR's exact commit (detached HEAD).`,
+    `  Do NOT run git fetch, git stash, git checkout, or git stash pop.`,
+    `- Step 1.5: PR type pre-classified below`,
+    `- Step 6 (cleanup): Handled automatically — do NOT remove the worktree`,
     ``,
-    `Start directly at Step 2 (spawn agents + read files).`,
+    `Start at Step 2 (spawn agents + read files).`,
     ``,
-    `Use the /${skill} skill to review ${repo}#${pr.number}.`,
+    `Read .claude/skills/${skill}/skill.md and follow its review process for ${repo}#${pr.number}.`,
     ``,
-    `## Pre-fetched PR metadata (Step 1.1 — do not re-fetch)`,
+    `## Pre-fetched PR metadata (Step 1.1)`,
     `Title: ${pr.title}`,
     `Author: ${pr.author.login}`,
     `Branch: ${pr.headRefName} → ${pr.baseRefName}`,
+    `State: ${pr.state}${pr.isDraft ? " (draft)" : ""}`,
     `Files changed: ${pr.changedFiles} (+${pr.additions} / -${pr.deletions})`,
     `URL: ${pr.url}`,
     ``,
     `## Pre-classified PR type (Step 1.5)`,
     prType,
     ``,
-    `## Changed files — authoritative list from gh pr diff --name-only (Step 1.2 — do not re-fetch)`,
+    `## Changed files — authoritative list from gh pr diff --name-only (Step 1.2)`,
     fileListText,
   ].join("\n");
 }
@@ -253,33 +259,40 @@ function buildIncrementalPrompt(
 
   const diffText = diffSinceLastReview.trim().length > 0
     ? diffSinceLastReview.slice(0, 40_000) // cap very large diffs
-    : "(no diff — PR is unchanged since the last review. Do NOT spawn agents or re-run tests. Simply state that no new changes were found and the previous review still stands.)";
+    : "(no diff — the PR's own files are unchanged since the last review)";
 
   return [
-    `IMPORTANT: The following Step 1 tasks are already complete — do NOT repeat them:`,
-    `- Step 1.3: The git worktree is checked out to the PR's exact commit (detached HEAD).`,
-    `  Do NOT run git checkout, git stash, or git stash pop.`,
-    `- Step 1.5: PR type is pre-classified below.`,
-    `- Step 6 (cleanup): Handled automatically — do NOT run git worktree remove.`,
+    `## Working directory`,
+    `Your current working directory is already the repository checked out at the PR's exact commit.`,
+    `Do NOT cd to any other path. Do NOT use the "Known Local Repos" path listed in the skill —`,
+    `you are already there (in an isolated worktree at the right commit).`,
     ``,
-    `Also: "gh pr view" will fail in this environment (no interactive auth).`,
-    `The PR metadata is pre-fetched below — use it directly and skip that call.`,
+    `## Pre-completed Step 1 tasks — do NOT repeat any of these`,
+    `- Step 1.1: PR metadata pre-fetched below — do NOT run "gh pr view"`,
+    `- Step 1.2: Changed file list pre-fetched below — do NOT run "gh pr diff --name-only"`,
+    `- Step 1.3: Already at the repo directory (current working directory)`,
+    `- Step 1.4: Already checked out to the PR's exact commit (detached HEAD).`,
+    `  Do NOT run git fetch, git stash, git checkout, or git stash pop.`,
+    `- Step 1.5: PR type pre-classified below`,
+    `- Step 6 (cleanup): Handled automatically — do NOT remove the worktree`,
     ``,
     `## RE-REVIEW MODE — This PR was previously reviewed. New commits have been pushed.`,
     ``,
-    `Your task: Use the /${skill} skill to re-review ${repo}#${pr.number}.`,
-    `Focus primarily on the NEW changes since the last review (see diff below).`,
-    `Re-assess any previous findings that may have been addressed.`,
-    `If the diff is trivial, say so and summarise what was checked.`,
+    `Start at Step 2. Read .claude/skills/${skill}/skill.md and follow its review process for ${repo}#${pr.number}.`,
+    `Run the complete skill — do not skip any steps (gates, file reads, API probing).`,
+    `The previous review is provided as reference context only: use it to note which`,
+    `prior findings have been addressed and which remain open. Do not let it limit the`,
+    `scope of your analysis — new issues not in the previous review must still be reported.`,
     ``,
-    `## Pre-fetched PR metadata`,
+    `## Pre-fetched PR metadata (Step 1.1)`,
     `Title: ${pr.title}`,
     `Author: ${pr.author.login}`,
     `Branch: ${pr.headRefName} → ${pr.baseRefName}`,
+    `State: ${pr.state}${pr.isDraft ? " (draft)" : ""}`,
     `Files changed: ${pr.changedFiles} (+${pr.additions} / -${pr.deletions})`,
     `URL: ${pr.url}`,
     ``,
-    `## Pre-classified PR type`,
+    `## Pre-classified PR type (Step 1.5)`,
     prType,
     ``,
     `## Changed files (full PR)`,
@@ -330,7 +343,8 @@ function loadGHToken(localRepoPath: string): string | undefined {
 export async function reviewPR(
   config: Config,
   pr: PullRequest,
-  repo: string
+  repo: string,
+  skillOverride?: string
 ): Promise<string | null> {
   const projectRoot = getProjectRoot();
   const reviewDir = join(
@@ -370,7 +384,7 @@ export async function reviewPR(
     console.warn(`  Could not fetch file list for ${repo}#${pr.number}: ${err} — falling back to MIXED`);
   }
 
-  const skill = selectSkill(pr.changedFiles, config.teamReviewThreshold, prType, repo, config);
+  const skill = skillOverride ?? selectSkill(pr.changedFiles, config.teamReviewThreshold, prType, repo, config);
 
   // Create isolated git worktree so the main repo is never touched
   let worktreeHandle: WorktreeHandle | undefined;
@@ -408,13 +422,22 @@ export async function reviewPR(
       );
     } catch { /* fall through to full review */ }
 
-    if (previousReviewText) {
+    // Only use incremental mode when the diff actually touches the PR's own files.
+    // A diff that only contains changes from other merged PRs (e.g. a merge-develop commit)
+    // provides no new signal about this PR — fall back to a full review so the skill
+    // runs completely rather than short-circuiting on a "trivial" diff.
+    const diffTouchesPRFiles = prFileList.length > 0 && prFileList.some(f => diffSinceLastReview.includes(f));
+
+    if (previousReviewText && diffTouchesPRFiles) {
       console.log(`  Diff-aware re-review: ${prevReview.headSha.slice(0, 7)} → ${pr.headRefOid.slice(0, 7)}`);
       prompt = buildIncrementalPrompt(
         skill, repo, pr, prType, prFileList,
         previousReviewText, diffSinceLastReview, prevReview.headSha
       );
     } else {
+      if (previousReviewText && !diffTouchesPRFiles) {
+        console.log(`  Re-review: diff contains no PR-file changes (merge-only commit) — running full review`);
+      }
       prompt = buildPrompt(skill, repo, pr, prType, prFileList);
     }
   } else {
@@ -445,7 +468,7 @@ export async function reviewPR(
       "--max-turns",
       "50",
       "--allowedTools",
-      "Read,Write,Glob,Grep,Agent,WebFetch,TodoWrite,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(node:*),Bash(npx:*),Bash(cat:*),Bash(grep:*),Bash(tail:*)",
+      "Skill,Read,Write,Glob,Grep,Agent,WebFetch,TodoWrite,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(node:*),Bash(npx:*),Bash(cat:*),Bash(grep:*),Bash(tail:*)",
     ],
     reviewCwd,
     timeoutMs,
@@ -550,11 +573,14 @@ export async function reviewPR(
     saveState(state);
 
     if (config.notify) {
-      const summary = extractSummary(reviewOutput);
+      const rawSummary = extractSummary(reviewOutput);
+      // Strip "PR Review: #NNN — " prefix that the review output often starts with,
+      // since the notification title already contains the repo and PR number.
+      const summary = rawSummary.replace(/^PR Review[:\s]+#\d+\s*[—–-]+\s*/i, "");
       const body = summary
         ? `${pr.author.login} · ${summary}`
-        : `${pr.title} by ${pr.author.login} [${skill}]`;
-      notify(`Review Ready: ${repo}#${pr.number}`, body, pr.url);
+        : `${pr.title} by ${pr.author.login}`;
+      notify(`${repo}#${pr.number} — Review Ready`, body, pr.url);
     }
 
     console.log(`Review saved (${skill}): ${reviewPath}`);
