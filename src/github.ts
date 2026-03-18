@@ -49,18 +49,17 @@ export async function getPRDiff(
   return gh(["pr", "diff", String(prNumber), "--repo", repo]);
 }
 
-export async function commentOnPR(
+export async function getPRFileList(
   repo: string,
-  prNumber: number,
-  body: string
-): Promise<void> {
-  await gh([
+  prNumber: number
+): Promise<string[]> {
+  const output = await gh([
     "pr",
-    "comment",
+    "diff",
     String(prNumber),
     "--repo",
     repo,
-    "--body",
-    body,
+    "--name-only",
   ]);
+  return output.split("\n").filter((f) => f.trim().length > 0);
 }

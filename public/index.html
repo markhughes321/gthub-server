@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Revue</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23161b22'/><circle cx='13' cy='13' r='6' fill='none' stroke='%2358a6ff' stroke-width='2.5'/><line x1='17.2' y1='17.2' x2='23' y2='23' stroke='%2358a6ff' stroke-width='2.5' stroke-linecap='round'/><line x1='10' y1='11' x2='16' y2='11' stroke='%233fb950' stroke-width='1.5' stroke-linecap='round'/><line x1='10' y1='13.5' x2='14' y2='13.5' stroke='%233fb950' stroke-width='1.5' stroke-linecap='round'/><line x1='10' y1='16' x2='15.5' y2='16' stroke='%233fb950' stroke-width='1.5' stroke-linecap='round'/></svg>">
+  <!-- marked.js for markdown rendering -->
+  <script src="/marked.min.js"></script>
+  <!-- highlight.js for syntax highlighting -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --danger: #f85149;
+      --warning: #d29922;
+      --tool-color: #bc8cff;
+      --code-bg: #1c2128;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--border); color: var(--muted); }
+    .badge.live { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+    /* ── Layout ── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 260px; flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      overflow-y: auto; background: var(--surface);
+    }
+    .section-label {
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.1em;
+      padding: 10px 12px 4px;
+    }
+    .review-item {
+      padding: 8px 12px; cursor: pointer;
+      border-left: 3px solid transparent; user-select: none;
+    }
+    .review-item:hover { background: rgba(255,255,255,0.04); }
+    .review-item.selected { background: rgba(88,166,255,0.08); border-left-color: var(--accent); }
+    .item-title {
+      font-size: 12px; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .item-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Status dot ── */
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dot.running  { background: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+    .dot.complete { background: var(--success); }
+    .dot.failed   { background: var(--danger); }
+    .dot.killed   { background: var(--warning); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Content ── */
+    .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .content-header {
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0; min-height: 56px; gap: 12px;
+    }
+    .pr-title { font-size: 13px; font-weight: 600; }
+    .pr-meta { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 8px; }
+    .elapsed-badge {
+      font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 8px;
+      background: rgba(88,166,255,0.12); color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .stop-btn {
+      padding: 5px 14px; flex-shrink: 0;
+      background: rgba(248,81,73,0.12); border: 1px solid rgba(248,81,73,0.35);
+      color: var(--danger); border-radius: 6px; font-size: 12px;
+      font-weight: 500; cursor: pointer;
+    }
+    .stop-btn:hover { background: rgba(248,81,73,0.22); }
+    .stop-btn:disabled { opacity: 0.45; cursor: default; }
+    .retry-btn {
+      padding: 5px 14px; flex-shrink: 0;
+      background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3);
+      color: var(--accent); border-radius: 6px; font-size: 12px;
+      font-weight: 500; cursor: pointer;
+    }
+    .retry-btn:hover { background: rgba(88,166,255,0.2); }
+    .retry-btn:disabled { opacity: 0.45; cursor: default; }
+
+    /* ── Live stream (running reviews) ── */
+    .output-wrap { flex: 1; overflow-y: auto; position: relative; scrollbar-width: none; }
+    .output-wrap::-webkit-scrollbar { display: none; }
+    .output {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px; line-height: 1.7;
+      white-space: pre-wrap; word-break: break-word;
+      color: #cdd9e5; padding: 16px; min-height: 100%;
+    }
+    @keyframes stream-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    .stream-line { display: inline; animation: stream-in 0.2s ease forwards; }
+    .output:empty::before {
+      content: 'Waiting for Claude to respond\2026';
+      color: var(--muted); font-style: italic;
+      animation: waiting 1.8s ease-in-out infinite;
+    }
+    @keyframes waiting { 0%,100%{opacity:0.9} 50%{opacity:0.35} }
+    .tool-line { color: var(--tool-color); opacity: 0.85; }
+
+    /* ── Rendered markdown (completed reviews) ── */
+    .markdown-wrap { flex: 1; overflow-y: auto; scrollbar-width: none; }
+    .markdown-wrap::-webkit-scrollbar { display: none; }
+
+    /* Lazy scroll fade-in for markdown children */
+    .markdown-body > * {
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 0.45s ease, transform 0.45s ease;
+    }
+    .markdown-body > *.in-view {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .markdown-body {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 28px 32px;
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .markdown-body h1 { font-size: 22px; font-weight: 700; margin: 0 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    .markdown-body h2 { font-size: 17px; font-weight: 700; margin: 28px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .markdown-body h3 { font-size: 14px; font-weight: 700; margin: 20px 0 8px; }
+    .markdown-body h4 { font-size: 13px; font-weight: 700; margin: 16px 0 6px; color: var(--muted); }
+    .markdown-body p { margin: 0 0 12px; }
+    .markdown-body ul, .markdown-body ol { margin: 0 0 12px 20px; }
+    .markdown-body li { margin: 4px 0; }
+    .markdown-body li > ul, .markdown-body li > ol { margin-bottom: 0; }
+    .markdown-body strong { font-weight: 700; color: #fff; }
+    .markdown-body em { font-style: italic; color: #cdd9e5; }
+    .markdown-body a { color: var(--accent); text-decoration: none; }
+    .markdown-body a:hover { text-decoration: underline; }
+    .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+    /* Inline code */
+    .markdown-body code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px; padding: 1px 5px; border-radius: 4px;
+      background: var(--code-bg); color: #f0883e;
+    }
+    /* Code blocks */
+    .markdown-body pre {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px; margin: 12px 0;
+      overflow-x: auto;
+    }
+    .markdown-body pre code {
+      background: none; color: #cdd9e5; padding: 0; font-size: 12px; line-height: 1.6;
+    }
+
+    /* Tables */
+    .markdown-body table {
+      width: 100%; border-collapse: collapse;
+      margin: 16px 0; font-size: 13px;
+    }
+    .markdown-body th {
+      background: var(--surface); font-weight: 600;
+      padding: 8px 12px; text-align: left;
+      border: 1px solid var(--border); color: var(--muted);
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .markdown-body td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+    .markdown-body tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+
+    /* Blockquotes */
+    .markdown-body blockquote {
+      border-left: 3px solid var(--border); margin: 12px 0;
+      padding: 4px 16px; color: var(--muted);
+    }
+
+    /* Severity pill colours in tables */
+    .markdown-body td:first-child { font-weight: 600; }
+
+    /* ── Tab bar ── */
+    .tab-bar {
+      display: flex; gap: 2px; padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .tab-btn {
+      padding: 8px 14px; font-size: 12px; font-weight: 500;
+      color: var(--muted); background: none; border: none;
+      border-bottom: 2px solid transparent; cursor: pointer;
+      margin-bottom: -1px; transition: color 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── GitHub link icon ── */
+    .gh-link {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+      color: var(--muted); text-decoration: none;
+      border: 1px solid var(--border); background: var(--surface);
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .gh-link:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* ── Done bar ── */
+    .done-bar {
+      padding: 7px 16px; font-size: 11px; font-weight: 600;
+      text-align: center; flex-shrink: 0; letter-spacing: 0.05em;
+    }
+    .done-bar.complete { background: rgba(63,185,80,0.1);  color: var(--success); }
+    .done-bar.failed   { background: rgba(248,81,73,0.1);  color: var(--danger); }
+    .done-bar.killed   { background: rgba(210,153,34,0.1); color: var(--warning); }
+
+    /* ── Filter bar ── */
+    .filter-bar { padding: 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .filter-input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px; padding: 5px 8px;
+      font-size: 12px; outline: none; font-family: inherit; box-sizing: border-box;
+    }
+    .filter-input:focus { border-color: var(--accent); }
+    .filter-input::placeholder { color: var(--muted); }
+    .filter-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .filter-pill {
+      font-size: 11px; padding: 2px 8px; border-radius: 8px;
+      border: 1px solid var(--border); background: none; color: var(--muted);
+      cursor: pointer; font-family: inherit; transition: all 0.12s;
+    }
+    .filter-pill:hover { color: var(--text); border-color: var(--muted); }
+    .filter-pill.fp-active {
+      background: rgba(88,166,255,0.15); color: var(--accent);
+      border-color: rgba(88,166,255,0.35);
+    }
+    .filter-count { font-size: 10px; color: var(--muted); margin-top: 5px; padding: 0 1px; }
+
+    /* ── Severity badges ── */
+    .sev-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .sev-pill {
+      font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 6px;
+      letter-spacing: 0.02em;
+    }
+    .sev-critical { background: rgba(248,81,73,0.15);  color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+    .sev-high     { background: rgba(210,153,34,0.15); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
+    .sev-medium   { background: rgba(88,166,255,0.12); color: #58a6ff; border: 1px solid rgba(88,166,255,0.25); }
+    .sev-low      { background: rgba(63,185,80,0.1);   color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+
+    .empty {
+      flex: 1; display: flex; align-items: center;
+      justify-content: center; color: var(--muted); font-size: 13px;
+    }
+
+    /* ── PR Details tab ── */
+    .details-wrap { flex: 1; overflow-y: auto; scrollbar-width: none; }
+    .details-wrap::-webkit-scrollbar { display: none; }
+    .details-body { max-width: 720px; margin: 0 auto; padding: 28px 32px; }
+    .details-section { margin-bottom: 24px; }
+    .details-section-label {
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px;
+    }
+    .details-grid {
+      display: grid; grid-template-columns: 140px 1fr;
+      gap: 6px 12px; font-size: 13px;
+    }
+    .details-key { color: var(--muted); font-size: 12px; padding-top: 1px; }
+    .details-val { color: var(--text); word-break: break-word; }
+    .stat-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .stat-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; padding: 3px 10px;
+      border-radius: 10px; border: 1px solid var(--border);
+    }
+    .stat-pill.add { color: var(--success); border-color: rgba(63,185,80,0.35); background: rgba(63,185,80,0.08); }
+    .stat-pill.del { color: var(--danger);  border-color: rgba(248,81,73,0.35);  background: rgba(248,81,73,0.08); }
+    .stat-pill.files { color: var(--muted); }
+    .stat-pill.draft { color: var(--warning); border-color: rgba(210,153,34,0.35); background: rgba(210,153,34,0.08); }
+    .pr-type-pill {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 6px; letter-spacing: 0.04em;
+      background: rgba(188,140,255,0.12); color: #bc8cff;
+      border: 1px solid rgba(188,140,255,0.3);
+    }
+    .branch-arrow { color: var(--muted); font-size: 12px; }
+    .branch-name {
+      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+      font-size: 12px; color: var(--accent);
+      background: rgba(88,166,255,0.08); padding: 1px 6px; border-radius: 4px;
+    }
+    .file-list {
+      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+      font-size: 11.5px; line-height: 1.8; color: #cdd9e5;
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+      max-height: 280px; overflow-y: auto; scrollbar-width: thin;
+    }
+    .file-list-item { display: block; }
+    .sha-mono {
+      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+      font-size: 12px; color: var(--muted); letter-spacing: 0.05em;
+    }
+
+    /* ── Claude Files section ── */
+    .cf-nav-item {
+      padding: 8px 12px; cursor: pointer;
+      border-left: 3px solid transparent; user-select: none;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .cf-nav-item:hover { background: rgba(255,255,255,0.04); }
+    .cf-nav-item.selected { background: rgba(88,166,255,0.08); border-left-color: var(--accent); }
+    .cf-nav-title { font-size: 12px; font-weight: 500; color: var(--text); }
+
+    /* Tree panel */
+    .cf-panel { flex: 1; display: flex; overflow: hidden; }
+    .cf-tree {
+      width: 230px; flex-shrink: 0; display: flex; flex-direction: column;
+      border-right: 1px solid var(--border); background: var(--surface); overflow: hidden;
+    }
+    .cf-tree-header {
+      padding: 8px 12px 7px; flex-shrink: 0;
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.1em;
+      border-bottom: 1px solid var(--border);
+    }
+    .cf-tree-body { flex: 1; overflow-y: auto; padding: 4px 0; scrollbar-width: none; }
+    .cf-tree-body::-webkit-scrollbar { display: none; }
+    .cf-tree-node {
+      height: 26px; cursor: pointer; white-space: nowrap;
+      overflow: hidden; display: flex; align-items: center; gap: 6px;
+      user-select: none; font-size: 12px;
+      border-radius: 4px; margin: 0 4px;
+      transition: background 0.1s;
+    }
+    .cf-tree-node:hover { background: rgba(255,255,255,0.06); }
+    .cf-tree-node.cf-selected {
+      background: rgba(88,166,255,0.12);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+    .cf-node-chevron { color: var(--muted); font-size: 10px; flex-shrink: 0; width: 12px; text-align: center; }
+    .cf-node-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      flex-shrink: 0; background: var(--muted);
+    }
+    .cf-node-name { overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+    .cf-tree-node.cf-selected .cf-node-name { color: var(--accent); }
+    /* File type colours */
+    .cf-tree-node[data-ext="md"] .cf-node-dot    { background: #79c0ff; }
+    .cf-tree-node[data-ext="md"] .cf-node-name   { color: #a5d6ff; }
+    .cf-tree-node[data-ext="ts"] .cf-node-dot,
+    .cf-tree-node[data-ext="js"] .cf-node-dot,
+    .cf-tree-node[data-ext="cjs"] .cf-node-dot  { background: #e3b341; }
+    .cf-tree-node[data-ext="ts"] .cf-node-name,
+    .cf-tree-node[data-ext="js"] .cf-node-name,
+    .cf-tree-node[data-ext="cjs"] .cf-node-name { color: #e3b341; }
+    .cf-tree-node[data-ext="json"] .cf-node-dot  { background: #f0883e; }
+    .cf-tree-node[data-ext="json"] .cf-node-name { color: #f0883e; }
+    .cf-tree-node[data-ext="sh"] .cf-node-dot,
+    .cf-tree-node[data-ext="bat"] .cf-node-dot   { background: var(--success); }
+    .cf-tree-node[data-ext="sh"] .cf-node-name,
+    .cf-tree-node[data-ext="bat"] .cf-node-name  { color: var(--success); }
+    .cf-tree-node.cf-selected .cf-node-dot  { background: var(--accent) !important; }
+    .cf-tree-node.cf-selected .cf-node-name { color: var(--accent) !important; }
+
+    /* Editor panel */
+    .cf-editor { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .cf-editor-bar {
+      padding: 7px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0; background: var(--surface); min-height: 38px;
+    }
+    .cf-breadcrumb {
+      display: flex; align-items: center; gap: 3px; overflow: hidden;
+      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+      font-size: 11px; flex: 1; min-width: 0;
+    }
+    .cf-breadcrumb-sep { color: var(--border); margin: 0 1px; font-size: 10px; }
+    .cf-breadcrumb-seg { color: var(--muted); white-space: nowrap; }
+    .cf-breadcrumb-seg.cf-crumb-last { color: var(--text); font-weight: 600; }
+    .cf-dirty-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--warning); flex-shrink: 0; display: none;
+    }
+    .cf-dirty-dot.visible { display: inline-block; }
+    .cf-save-btn {
+      padding: 4px 14px; background: rgba(88,166,255,0.1);
+      border: 1px solid rgba(88,166,255,0.3); color: var(--accent);
+      border-radius: 6px; font-size: 11px; font-weight: 500;
+      cursor: pointer; flex-shrink: 0; transition: background 0.15s;
+    }
+    .cf-save-btn:hover { background: rgba(88,166,255,0.2); }
+    .cf-save-btn:disabled { opacity: 0.45; cursor: default; }
+    .cf-save-status { font-size: 11px; flex-shrink: 0; white-space: nowrap; color: var(--muted); }
+    .cf-save-status.ok  { color: var(--success); }
+    .cf-save-status.err { color: var(--danger); }
+    .cf-editor-wrap { flex: 1; display: flex; overflow: hidden; }
+    /* View pane (rendered markdown or syntax-highlighted code) */
+    .cf-view-pane {
+      flex: 1; display: flex; flex-direction: column;
+      overflow-y: auto; overflow-x: hidden;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+      background: var(--code-bg);
+    }
+    .cf-view-pane .markdown-wrap { overflow: visible; flex: 1; }
+    .cf-view-pane .markdown-body { max-width: none; padding: 28px 36px; }
+    .cf-code-wrap { flex: 1; overflow: visible; }
+    .cf-code-wrap pre { margin: 0; }
+    .cf-code-wrap pre code.hljs {
+      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+      font-size: 12px; line-height: 1.7;
+      background: var(--code-bg); padding: 16px; display: block;
+      white-space: pre; tab-size: 2;
+    }
+    /* Edit pane (textarea + line numbers) */
+    .cf-edit-pane { flex: 1; display: flex; overflow: hidden; }
+    .cf-line-nums {
+      width: 52px; flex-shrink: 0; overflow: hidden;
+      text-align: right; padding: 16px 10px 16px 0;
+      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+      font-size: 12px; line-height: 1.7; white-space: pre;
+      color: #444c56; user-select: none;
+      background: var(--code-bg); border-right: 1px solid var(--border);
+    }
+    .cf-textarea {
+      flex: 1; background: var(--code-bg); color: #cdd9e5;
+      border: none; outline: none; resize: none;
+      font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+      font-size: 12px; line-height: 1.7; padding: 16px 16px 16px 14px;
+      tab-size: 2; overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    /* Mode toggle tabs */
+    .cf-mode-tabs {
+      display: flex; border: 1px solid var(--border); border-radius: 6px;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .cf-mode-btn {
+      padding: 3px 12px; font-size: 11px; font-weight: 500;
+      color: var(--muted); background: none; border: none;
+      cursor: pointer; font-family: inherit; transition: all 0.12s;
+    }
+    .cf-mode-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .cf-mode-btn.active { background: var(--border); color: var(--text); }
+    .cf-mode-btn + .cf-mode-btn { border-left: 1px solid var(--border); }
+    /* highlight.js theme (GitHub Dark palette) */
+    .hljs { background: var(--code-bg) !important; color: #cdd9e5; }
+    .hljs-keyword, .hljs-selector-tag                 { color: #ff7b72; }
+    .hljs-built_in                                    { color: #ffa657; }
+    .hljs-string, .hljs-attr, .hljs-template-variable { color: #a5d6ff; }
+    .hljs-number, .hljs-literal, .hljs-regexp         { color: #79c0ff; }
+    .hljs-comment                                     { color: #8b949e; font-style: italic; }
+    .hljs-title, .hljs-title.function_               { color: #d2a8ff; }
+    .hljs-type, .hljs-class .hljs-title              { color: #ffa657; }
+    .hljs-property                                    { color: #79c0ff; }
+    .hljs-meta                                        { color: #e3b341; }
+    .hljs-name, .hljs-section                         { color: #7ee787; }
+    .hljs-punctuation, .hljs-operator                 { color: #cdd9e5; }
+    .hljs-link                                        { color: #a5d6ff; text-decoration: underline; }
+    .hljs-emphasis                                    { font-style: italic; }
+    .hljs-strong                                      { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Revue</h1>
+    <span class="badge" id="badge-live">0 active</span>
+    <span class="badge" id="badge-queue" style="display:none">0 queued</span>
+    <span class="badge" id="badge-total">0 reviews</span>
+    <span class="badge" id="badge-cost" style="display:none"></span>
+  </header>
+  <div class="main">
+    <div class="sidebar" id="sidebar" style="display:flex;flex-direction:column">
+      <div class="filter-bar" id="filter-bar">
+        <input class="filter-input" id="filter-input" type="text" placeholder="Search PRs…">
+        <div class="filter-pills" id="filter-status-pills">
+          <button class="filter-pill fp-active" data-fstatus="">All</button>
+          <button class="filter-pill" data-fstatus="running">Active</button>
+          <button class="filter-pill" data-fstatus="complete">Done</button>
+          <button class="filter-pill" data-fstatus="failed">Failed</button>
+        </div>
+        <div class="filter-pills" id="filter-type-pills"></div>
+        <div class="filter-count" id="filter-count"></div>
+      </div>
+      <div id="sidebar-list" style="flex:1;overflow-y:auto"></div>
+    </div>
+    <div class="content" id="content">
+      <div class="empty">Select a review to see its output</div>
+    </div>
+  </div>
+
+  <script>
+    let reviews = [];
+    let selectedId = null;
+    let activeEs = null;
+    let elapsedTimer = null;
+    let currentView = 'reviews';
+    let cfTree = null;
+    let cfSelectedPath = null;
+    let cfExpandedDirs = new Set();
+    let cfSaveTimer = null;
+    let cfViewMode = 'view';
+
+    // ── Filter state ──────────────────────────────────────────────────────────
+    let filterText = '';
+    let filterStatus = '';
+    let filterType = '';
+    let filterDebounceTimer = null;
+
+    function applyFilters(list) {
+      return list.filter(r => {
+        if (filterText) {
+          const q = filterText.toLowerCase();
+          if (!r.title?.toLowerCase().includes(q) &&
+              !r.author?.toLowerCase().includes(q) &&
+              !String(r.prNumber).includes(q) &&
+              !r.repo?.toLowerCase().includes(q)) return false;
+        }
+        if (filterStatus) {
+          if (filterStatus === 'failed') {
+            if (r.status !== 'failed' && r.status !== 'killed') return false;
+          } else {
+            if (r.status !== filterStatus) return false;
+          }
+        }
+        if (filterType && r.prType !== filterType) return false;
+        return true;
+      });
+    }
+
+    function renderTypePills() {
+      const container = document.getElementById('filter-type-pills');
+      if (!container) return;
+      const types = [...new Set(reviews.map(r => r.prType).filter(Boolean))].sort();
+      if (!types.length) { container.innerHTML = ''; return; }
+      container.innerHTML = ['', ...types].map(t =>
+        `<button class="filter-pill${filterType === t ? ' fp-active' : ''}" data-ftype="${esc(t)}">${t === '' ? 'All' : esc(t)}</button>`
+      ).join('');
+      container.querySelectorAll('[data-ftype]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          filterType = btn.dataset.ftype;
+          renderTypePills();
+          renderSidebarList();
+        });
+      });
+    }
+
+    function initFilterBar() {
+      const input = document.getElementById('filter-input');
+      if (input) {
+        input.addEventListener('input', (e) => {
+          filterText = e.target.value;
+          if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+          filterDebounceTimer = setTimeout(renderSidebarList, 150);
+        });
+      }
+      document.getElementById('filter-status-pills')?.querySelectorAll('[data-fstatus]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          filterStatus = btn.dataset.fstatus;
+          document.querySelectorAll('#filter-status-pills .filter-pill').forEach(b =>
+            b.classList.toggle('fp-active', b === btn));
+          renderSidebarList();
+        });
+      });
+    }
+
+    // ── Data ─────────────────────────────────────────────────────────────────
+
+    async function fetchReviews() {
+      try {
+        const [reviewsRes, queueRes] = await Promise.all([
+          fetch('/api/reviews'),
+          fetch('/api/queue').catch(() => null),
+        ]);
+        reviews = await reviewsRes.json();
+        const queueData = queueRes?.ok ? await queueRes.json() : null;
+        renderSidebar();
+        updateBadges(queueData);
+      } catch {}
+    }
+
+    function updateBadges(queueData) {
+      const live = reviews.filter(r => r.status === 'running').length;
+      const done = reviews.filter(r => r.status === 'complete').length;
+      const bl = document.getElementById('badge-live');
+      bl.textContent = `${live} active`;
+      bl.className = live > 0 ? 'badge live' : 'badge';
+      document.getElementById('badge-total').textContent = `${done} complete`;
+      const bq = document.getElementById('badge-queue');
+      if (bq && queueData) {
+        const pending = queueData.pending ?? 0;
+        bq.textContent = `${pending} queued`;
+        bq.style.display = pending > 0 ? '' : 'none';
+      }
+      const totalCost = reviews.reduce((sum, r) => sum + (r.tokenUsage?.estimatedCostUsd ?? 0), 0);
+      const bc = document.getElementById('badge-cost');
+      if (bc) {
+        bc.style.display = totalCost > 0 ? '' : 'none';
+        bc.textContent = `$${totalCost.toFixed(3)} total`;
+      }
+    }
+
+    // ── Sidebar ───────────────────────────────────────────────────────────────
+
+    function renderSidebarList() {
+      const filtered = applyFilters(reviews);
+      const running  = filtered.filter(r => r.status === 'running');
+      const complete = filtered.filter(r => r.status === 'complete');
+      const killed   = filtered.filter(r => r.status === 'killed' || r.status === 'failed');
+      let html = '';
+      if (running.length) {
+        html += `<div class="section-label">Active</div>`;
+        running.forEach(r => html += reviewItem(r));
+      }
+      if (complete.length) {
+        html += `<div class="section-label">Completed</div>`;
+        complete.forEach(r => html += reviewItem(r));
+      }
+      if (killed.length) {
+        html += `<div class="section-label">Killed / Failed</div>`;
+        killed.forEach(r => html += reviewItem(r));
+      }
+      if (!running.length && !complete.length && !killed.length && reviews.length) {
+        html += `<div style="padding:16px 12px;color:var(--muted);font-size:12px">No results</div>`;
+      }
+      const cfSel = currentView === 'claude-files' ? ' selected' : '';
+      html += `
+        <div style="border-top:1px solid var(--border);margin-top:8px">
+          <div class="section-label" style="padding-top:10px">Project</div>
+          <div class="cf-nav-item${cfSel}" id="cf-nav">
+            <span>📁</span><span class="cf-nav-title">Claude Files</span>
+          </div>
+        </div>`;
+      document.getElementById('sidebar-list').innerHTML = html;
+      document.querySelectorAll('.review-item').forEach(el => {
+        el.addEventListener('click', () => selectReview(el.dataset.id));
+      });
+      document.getElementById('cf-nav')?.addEventListener('click', selectClaudeFiles);
+
+      // Update filter count
+      const countEl = document.getElementById('filter-count');
+      if (countEl) {
+        const isFiltered = filterText || filterStatus || filterType;
+        countEl.textContent = isFiltered ? `${filtered.length} of ${reviews.length} reviews` : '';
+      }
+    }
+
+    function renderSidebar() {
+      renderTypePills();
+      renderSidebarList();
+    }
+
+    function severityBadges(s) {
+      if (!s) return '';
+      const badges = [];
+      if (s.critical > 0) badges.push(`<span class="sev-pill sev-critical" title="Critical">${s.critical} critical</span>`);
+      if (s.high > 0)     badges.push(`<span class="sev-pill sev-high" title="High">${s.high} high</span>`);
+      if (s.medium > 0)   badges.push(`<span class="sev-pill sev-medium" title="Medium">${s.medium} med</span>`);
+      if (s.low > 0)      badges.push(`<span class="sev-pill sev-low" title="Low">${s.low} low</span>`);
+      return badges.length ? `<div class="sev-row">${badges.join('')}</div>` : '';
+    }
+
+    function reviewItem(r) {
+      const sel  = r.id === selectedId ? ' selected' : '';
+      const repo = r.repo.split('/')[1] || r.repo;
+      return `
+        <div class="review-item${sel}" data-id="${esc(r.id)}">
+          <div class="item-title"><span class="dot ${r.status}"></span><span>${esc(r.title)}</span></div>
+          <div class="item-meta">${esc(repo)}#${r.prNumber}${r.author ? ` · @${esc(r.author)}` : ''} · ${ago(r.startedAt)}</div>
+          ${severityBadges(r.severitySummary)}
+        </div>`;
+    }
+
+    // ── Select & render ───────────────────────────────────────────────────────
+
+    function selectReview(id) {
+      currentView = 'reviews';
+      selectedId = id;
+      activeTab = 'review';
+      closeStream();
+      renderSidebar();
+
+      const review = reviews.find(r => r.id === id);
+      if (!review) return;
+
+      const isRunning = review.status === 'running';
+
+      if (isRunning) {
+        showLiveView(review);
+      } else {
+        showCompletedView(review);
+      }
+    }
+
+    // ── Live view (running) ───────────────────────────────────────────────────
+
+    function showLiveView(review) {
+      document.getElementById('content').innerHTML = `
+        <div class="content-header">
+          <div style="min-width:0">
+            <div class="pr-title">${esc(review.title)}</div>
+            <div class="pr-meta">
+              ${esc(review.repo)}#${review.prNumber}${review.author ? ` &middot; @${esc(review.author)}` : ''}
+              &middot; <span class="elapsed-badge" id="elapsed">0s</span>
+            </div>
+          </div>
+          <button class="stop-btn" id="stop-btn">Stop Review</button>
+        </div>
+        <div class="output-wrap" id="output-wrap"><pre class="output" id="output"></pre></div>`;
+
+      document.getElementById('stop-btn')
+        .addEventListener('click', () => stopReview(review.id));
+      startElapsedTimer(review.startedAt);
+      openStream(review.id);
+    }
+
+    function openStream(id) {
+      const output = document.getElementById('output');
+      const wrap   = document.getElementById('output-wrap');
+      if (!output || !wrap) return;
+
+      const es = new EventSource(`/api/reviews/${encodeURIComponent(id)}/stream`);
+      activeEs = es;
+
+      es.onmessage = (e) => {
+        appendToOutput(output, wrap, JSON.parse(e.data));
+      };
+
+      es.addEventListener('done', (e) => {
+        closeStream();
+        const status = JSON.parse(e.data);
+        const r = reviews.find(r => r.id === id);
+        if (r) r.status = status;
+        updateBadges();
+        renderSidebar();
+        // Switch to rendered markdown view
+        showCompletedView(r ?? { id, status });
+      });
+
+      es.onerror = () => {};
+    }
+
+    function appendToOutput(output, wrap, text) {
+      const atBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+      const lines = text.split('\n');
+      lines.forEach((line, i) => {
+        const isLast = i === lines.length - 1;
+        const span = document.createElement('span');
+        span.className = line.startsWith('\u25b6') ? 'tool-line stream-line' : 'stream-line';
+        span.textContent = line + (isLast ? '' : '\n');
+        output.appendChild(span);
+      });
+      if (atBottom) wrap.scrollTop = wrap.scrollHeight;
+    }
+
+    async function stopReview(id) {
+      const btn = document.getElementById('stop-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Stopping…'; }
+      await fetch(`/api/reviews/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    }
+
+    // ── Completed view (tabbed) ───────────────────────────────────────────────
+
+    let activeTab = 'review';
+
+    function githubIcon() {
+      return `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M3.75 2h3.5a.75.75 0 0 1 0 1.5h-3.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-3.5a.75.75 0 0 1 1.5 0v3.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25v-8.5C2 2.784 2.784 2 3.75 2Zm6.854-1h4.146a.25.25 0 0 1 .25.25v4.146a.75.75 0 0 1-1.5 0V2.56l-3.97 3.97a.75.75 0 1 1-1.06-1.06l3.97-3.97h-1.586a.75.75 0 0 1 0-1.5Z"/>
+      </svg>`;
+    }
+
+    async function showCompletedView(review) {
+      activeTab = 'review';
+      const content = document.getElementById('content');
+      const isRetryable = review.status === 'killed' || review.status === 'failed';
+      const statusIcon = review.status === 'complete' ? '✓' :
+                         review.status === 'failed'   ? '✗' : '⊘';
+      const ghUrl = `https://github.com/${review.repo ?? ''}/pull/${review.prNumber ?? ''}/files`;
+
+      content.innerHTML = `
+        <div class="content-header">
+          <div style="min-width:0">
+            <div class="pr-title">${esc(review.title ?? '')}</div>
+            <div class="pr-meta">
+              ${esc(review.repo ?? '')}#${review.prNumber ?? ''}${review.author ? ` &middot; @${esc(review.author)}` : ''}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <span style="font-size:11px;color:var(--muted)">${duration(review.startedAt, review.completedAt) ? `took ${duration(review.startedAt, review.completedAt)}` : esc(ago(review.startedAt ?? ''))}</span>
+            <a class="gh-link" href="${esc(ghUrl)}" target="_blank" rel="noopener" title="Open PR on GitHub">${githubIcon()}</a>
+            ${isRetryable ? `<button class="retry-btn" id="retry-btn">↺ Re-run Review</button>` : ''}
+          </div>
+        </div>
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="review">Review</button>
+          <button class="tab-btn" data-tab="log">Activity Log</button>
+          <button class="tab-btn" data-tab="details">PR Details</button>
+          <button class="tab-btn" data-tab="history">History</button>
+        </div>
+        <div id="tab-content" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>
+        <div class="done-bar ${review.status}">${statusIcon} ${(review.status ?? '').toUpperCase()}</div>`;
+
+      document.getElementById('retry-btn')?.addEventListener('click', () => retryReview(review.id));
+
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          activeTab = btn.dataset.tab;
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+          loadTabContent(review, activeTab);
+        });
+      });
+
+      loadTabContent(review, 'review');
+    }
+
+    async function loadTabContent(review, tab) {
+      const wrap = document.getElementById('tab-content');
+      if (!wrap) return;
+
+      if (tab === 'review') {
+        wrap.innerHTML = `
+          <div class="markdown-wrap" id="markdown-wrap">
+            <div class="markdown-body" id="markdown-body">
+              <p style="color:var(--muted);font-style:italic">Loading review…</p>
+            </div>
+          </div>`;
+        try {
+          const res = await fetch(`/api/reviews/${encodeURIComponent(review.id)}/content`);
+          if (!res.ok) throw new Error('not found');
+          const md = await res.text();
+          const body = document.getElementById('markdown-body');
+          if (!body) return;
+          body.innerHTML = marked.parse(md);
+          initLazyScroll(body, document.getElementById('markdown-wrap'));
+        } catch {
+          const body = document.getElementById('markdown-body');
+          if (body) body.innerHTML = `<p style="color:var(--muted)">Review file not available yet.</p>`;
+        }
+      } else if (tab === 'log') {
+        wrap.innerHTML = `<div class="output-wrap" id="log-wrap"><pre class="output" id="log-output"></pre></div>`;
+        try {
+          const res = await fetch(`/api/reviews/${encodeURIComponent(review.id)}/log`);
+          if (!res.ok) throw new Error('not found');
+          const text = await res.text();
+          const output = document.getElementById('log-output');
+          if (!output) return;
+          const logWrap = document.getElementById('log-wrap');
+          appendToOutput(output, logWrap, text);
+          initLogStagger(output, logWrap);
+        } catch {
+          const output = document.getElementById('log-output');
+          if (output) output.textContent = 'Activity log not available.';
+        }
+      } else if (tab === 'history') {
+        wrap.innerHTML = `<div class="details-wrap"><div class="details-body" id="history-body"><p style="color:var(--muted);font-style:italic">Loading history…</p></div></div>`;
+        renderHistory(review, document.getElementById('history-body'));
+      } else {
+        wrap.innerHTML = `<div class="details-wrap"><div class="details-body" id="details-body"><p style="color:var(--muted);font-style:italic">Loading…</p></div></div>`;
+        renderDetails(review, document.getElementById('details-body'));
+      }
+    }
+
+    async function renderHistory(review, container) {
+      if (!container) return;
+      const encodedRepo = encodeURIComponent(review.repo);
+      let snapshots = [];
+      try {
+        const res = await fetch(`/api/prs/${encodedRepo}/${review.prNumber}/reviews`);
+        if (res.ok) snapshots = await res.json();
+      } catch { /* unavailable */ }
+
+      if (!snapshots.length) {
+        container.innerHTML = `<p style="color:var(--muted)">No review history available.</p>`;
+        return;
+      }
+
+      let leftPath = snapshots[0]?.reviewPath ?? null;
+      let rightPath = snapshots[1]?.reviewPath ?? null;
+
+      const render = async () => {
+        const rows = snapshots.map((s) => {
+          const ts = s.timestamp.replace(/T(\d{2})-(\d{2})-\d{2}/, ' $1:$2').replace(/-/g, (m, o) => o < 10 ? '-' : '/');
+          const sha = s.headSha ? `<span class="sha-mono">${esc(s.headSha.slice(0,7))}</span>` : '—';
+          const lSel = leftPath === s.reviewPath ? ' fp-active' : '';
+          const rSel = rightPath === s.reviewPath ? ' fp-active' : '';
+          return `<tr>
+            <td style="padding:4px 8px">${esc(ts)}</td>
+            <td style="padding:4px 8px">${sha}</td>
+            <td style="padding:4px 8px">${esc(s.model ?? '—')}</td>
+            <td style="padding:4px 8px"><button class="filter-pill${lSel}" data-hpath="${esc(s.reviewPath)}" data-side="left">A</button></td>
+            <td style="padding:4px 8px"><button class="filter-pill${rSel}" data-hpath="${esc(s.reviewPath)}" data-side="right">B</button></td>
+          </tr>`;
+        }).join('');
+
+        let diffHtml = '<p style="color:var(--muted);font-size:12px;margin-top:8px">Select two reviews above to compare.</p>';
+        if (leftPath && rightPath && leftPath !== rightPath) {
+          try {
+            const [lRes, rRes] = await Promise.all([
+              fetch(`/api/reviews/file?path=${encodeURIComponent(leftPath)}`),
+              fetch(`/api/reviews/file?path=${encodeURIComponent(rightPath)}`),
+            ]);
+            if (lRes.ok && rRes.ok) {
+              const [lText, rText] = await Promise.all([lRes.text(), rRes.text()]);
+              diffHtml = `<div style="font-family:monospace;font-size:11.5px;line-height:1.65;overflow-x:auto;margin-top:8px">${renderLineDiff(lText, rText)}</div>`;
+            }
+          } catch { /* skip */ }
+        }
+
+        container.innerHTML = `
+          <div class="details-section-label" style="margin-bottom:8px">Snapshots — click A / B to compare</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">
+            <thead><tr style="color:var(--muted);text-align:left">
+              <th style="padding:4px 8px;border-bottom:1px solid var(--border)">Date</th>
+              <th style="padding:4px 8px;border-bottom:1px solid var(--border)">SHA</th>
+              <th style="padding:4px 8px;border-bottom:1px solid var(--border)">Model</th>
+              <th style="padding:4px 8px;border-bottom:1px solid var(--border)">A</th>
+              <th style="padding:4px 8px;border-bottom:1px solid var(--border)">B</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="details-section-label">Diff (A → B)</div>
+          ${diffHtml}`;
+
+        container.querySelectorAll('[data-hpath]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            if (btn.dataset.side === 'left') leftPath = btn.dataset.hpath;
+            else rightPath = btn.dataset.hpath;
+            render();
+          });
+        });
+      };
+
+      await render();
+    }
+
+    function renderLineDiff(aText, bText) {
+      const aLines = aText.split('\n');
+      const bLines = bText.split('\n');
+      const lcs = computeLCS(aLines, bLines);
+      const parts = [];
+      let ai = 0, bi = 0, li = 0;
+      while (ai < aLines.length || bi < bLines.length) {
+        if (li < lcs.length && ai === lcs[li][0] && bi === lcs[li][1]) {
+          parts.push(`<div style="color:var(--muted)">&nbsp;${esc(aLines[ai])}</div>`);
+          ai++; bi++; li++;
+        } else if (ai < aLines.length && (li >= lcs.length || ai < lcs[li][0])) {
+          parts.push(`<div style="background:rgba(248,81,73,0.1);color:#f85149">-${esc(aLines[ai++])}</div>`);
+        } else {
+          parts.push(`<div style="background:rgba(63,185,80,0.1);color:#3fb950">+${esc(bLines[bi++])}</div>`);
+        }
+      }
+      return parts.join('');
+    }
+
+    function computeLCS(a, b) {
+      if (a.length > 600 || b.length > 600) return [];
+      const m = a.length, n = b.length;
+      const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+      for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+          dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+      const lcs = [];
+      let i = m, j = n;
+      while (i > 0 && j > 0) {
+        if (a[i-1] === b[j-1]) { lcs.unshift([i-1, j-1]); i--; j--; }
+        else if (dp[i-1][j] > dp[i][j-1]) i--;
+        else j--;
+      }
+      return lcs;
+    }
+
+    async function renderDetails(review, container) {
+      if (!container) return;
+
+      // Fetch meta.json for changedFileList (only available for completed reviews)
+      let meta = null;
+      try {
+        const res = await fetch(`/api/reviews/${encodeURIComponent(review.id)}/meta`);
+        if (res.ok) meta = await res.json();
+      } catch { /* meta unavailable for running reviews */ }
+
+      const r = review;
+      const shortSha = r.headSha ? r.headSha.slice(0, 7) : null;
+
+      const branchHtml = (r.headRefName && r.baseRefName)
+        ? `<span class="branch-name">${esc(r.headRefName)}</span>
+           <span class="branch-arrow"> → </span>
+           <span class="branch-name">${esc(r.baseRefName)}</span>`
+        : `<span style="color:var(--muted)">—</span>`;
+
+      const prTypeHtml = r.prType
+        ? `<span class="pr-type-pill">${esc(r.prType)}</span>`
+        : '—';
+
+      const statsHtml = `
+        <div class="stat-row">
+          ${r.isDraft ? `<span class="stat-pill draft">DRAFT</span>` : ''}
+          ${r.additions != null ? `<span class="stat-pill add">+${r.additions.toLocaleString()}</span>` : ''}
+          ${r.deletions != null ? `<span class="stat-pill del">−${r.deletions.toLocaleString()}</span>` : ''}
+          ${r.changedFiles ? `<span class="stat-pill files">${r.changedFiles} file${r.changedFiles !== 1 ? 's' : ''}</span>` : ''}
+        </div>`;
+
+      const fileListHtml = meta?.changedFileList?.length
+        ? `<div class="file-list">${meta.changedFileList.map(f => `<span class="file-list-item">${esc(f)}</span>`).join('')}</div>`
+        : `<span style="color:var(--muted);font-size:12px">${r.status === 'running' ? 'Available after review completes' : 'Not available'}</span>`;
+
+      container.innerHTML = `
+        <div class="details-section">
+          <div class="details-section-label">Pull Request</div>
+          <div class="details-grid">
+            <span class="details-key">Title</span>
+            <span class="details-val">${esc(r.title ?? '')}</span>
+            <span class="details-key">Author</span>
+            <span class="details-val">${r.author ? `@${esc(r.author)}` : '—'}</span>
+            <span class="details-key">Branch</span>
+            <span class="details-val">${branchHtml}</span>
+            <span class="details-key">Diff</span>
+            <span class="details-val">${statsHtml}</span>
+            <span class="details-key">PR Type</span>
+            <span class="details-val">${prTypeHtml}</span>
+            ${shortSha ? `<span class="details-key">Head SHA</span><span class="details-val"><span class="sha-mono">${esc(shortSha)}</span></span>` : ''}
+          </div>
+        </div>
+        <div class="details-section">
+          <div class="details-section-label">Review</div>
+          <div class="details-grid">
+            <span class="details-key">Skill</span>
+            <span class="details-val">${esc(r.skill ?? '')}</span>
+            <span class="details-key">Model</span>
+            <span class="details-val">${esc(r.model ?? '')}</span>
+            <span class="details-key">Started</span>
+            <span class="details-val">${r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'}</span>
+            ${duration(r.startedAt, r.completedAt) ? `<span class="details-key">Duration</span><span class="details-val">${duration(r.startedAt, r.completedAt)}</span>` : ''}
+          </div>
+        </div>
+        ${r.tokenUsage ? `<div class="details-section">
+          <div class="details-section-label">Token Usage</div>
+          <div class="details-grid">
+            <span class="details-key">Input</span>
+            <span class="details-val">${r.tokenUsage.inputTokens.toLocaleString()} tokens</span>
+            <span class="details-key">Output</span>
+            <span class="details-val">${r.tokenUsage.outputTokens.toLocaleString()} tokens</span>
+            ${r.tokenUsage.cacheReadTokens ? `<span class="details-key">Cache read</span><span class="details-val">${r.tokenUsage.cacheReadTokens.toLocaleString()} tokens</span>` : ''}
+            ${r.tokenUsage.cacheCreationTokens ? `<span class="details-key">Cache write</span><span class="details-val">${r.tokenUsage.cacheCreationTokens.toLocaleString()} tokens</span>` : ''}
+            <span class="details-key">Est. cost</span>
+            <span class="details-val" style="color:var(--success)">$${r.tokenUsage.estimatedCostUsd.toFixed(4)}</span>
+          </div>
+        </div>` : ''}
+        <div class="details-section">
+          <div class="details-section-label">Changed Files</div>
+          ${fileListHtml}
+        </div>`;
+    }
+
+    async function retryReview(id) {
+      const btn = document.getElementById('retry-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Queuing…'; }
+      const res = await fetch(`/api/reviews/${encodeURIComponent(id)}/retry`, { method: 'POST' });
+      if (res.ok) {
+        // New review will appear via the 5s poll — just give feedback
+        if (btn) { btn.textContent = 'Queued ✓'; }
+        setTimeout(() => fetchReviews(), 1500);
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = '↺ Re-run Review'; }
+      }
+    }
+
+    // ── Elapsed timer ─────────────────────────────────────────────────────────
+
+    function startElapsedTimer(startedAt) {
+      stopElapsedTimer();
+      const update = () => {
+        const el = document.getElementById('elapsed');
+        if (!el) return stopElapsedTimer();
+        const s = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+        el.textContent = s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+      };
+      update();
+      elapsedTimer = setInterval(update, 1000);
+    }
+
+    function stopElapsedTimer() {
+      if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+    }
+
+    function closeStream() {
+      if (activeEs) { activeEs.close(); activeEs = null; }
+      stopElapsedTimer();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    function ago(iso) {
+      if (!iso) return '';
+      const s = (Date.now() - new Date(iso).getTime()) / 1000;
+      if (s < 60) return `${Math.round(s)}s ago`;
+      if (s < 3600) return `${Math.round(s/60)}m ago`;
+      return `${Math.round(s/3600)}h ago`;
+    }
+
+    function duration(startIso, endIso) {
+      if (!startIso || !endIso) return null;
+      const s = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 1000);
+      if (s < 60) return `${s}s`;
+      if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
+      return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ── Log stagger (completed activity log) ─────────────────────────────────
+
+    function initLogStagger(output, wrap) {
+      const spans = Array.from(output.children);
+      if (!spans.length) return;
+
+      // Strip the simultaneous stream-in; we'll drive timing ourselves
+      spans.forEach(span => {
+        span.classList.remove('stream-line');
+        span.style.opacity = '0';
+      });
+
+      const obs = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            e.target.style.animationDelay = '';
+            e.target.classList.add('stream-line');
+            obs.unobserve(e.target);
+          }
+        });
+      }, { root: wrap, threshold: 0.05 });
+
+      const wrapRect = wrap.getBoundingClientRect();
+      let delay = 0;
+      spans.forEach(span => {
+        const rect = span.getBoundingClientRect();
+        if (rect.top < wrapRect.bottom + 10 && rect.bottom > wrapRect.top) {
+          span.style.animationDelay = `${delay}ms`;
+          delay = Math.min(delay + 6, 200);
+          requestAnimationFrame(() => span.classList.add('stream-line'));
+        } else {
+          obs.observe(span);
+        }
+      });
+    }
+
+    // ── Lazy scroll (completed markdown) ─────────────────────────────────────
+
+    function initLazyScroll(body, wrap) {
+      const children = Array.from(body.children);
+      if (!children.length) return;
+
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+            obs.unobserve(entry.target);
+          }
+        });
+      }, { root: wrap, threshold: 0.08 });
+
+      // Stagger the first screenful so they cascade in
+      let delay = 0;
+      children.forEach(el => {
+        const rect = el.getBoundingClientRect();
+        const wrapRect = wrap.getBoundingClientRect();
+        if (rect.top < wrapRect.bottom + 20) {
+          // Initially visible — animate with stagger
+          el.style.transitionDelay = `${delay}ms`;
+          delay = Math.min(delay + 40, 320);
+          requestAnimationFrame(() => el.classList.add('in-view'));
+        } else {
+          obs.observe(el);
+        }
+      });
+    }
+
+    // ── Claude Files ──────────────────────────────────────────────────────────
+
+    function selectClaudeFiles() {
+      currentView = 'claude-files';
+      selectedId = null;
+      closeStream();
+      renderSidebar();
+      showClaudeFilesPanel();
+    }
+
+    function showClaudeFilesPanel() {
+      const content = document.getElementById('content');
+      content.innerHTML = `
+        <div class="content-header" style="flex-shrink:0">
+          <div>
+            <div class="pr-title">.claude/</div>
+            <div class="pr-meta">Claude project files</div>
+          </div>
+        </div>
+        <div class="cf-panel">
+          <div class="cf-tree">
+            <div class="cf-tree-header">Explorer</div>
+            <div class="cf-tree-body" id="cf-tree-body">
+              <span style="color:var(--muted);padding:12px;display:block;font-size:12px">Loading…</span>
+            </div>
+          </div>
+          <div class="cf-editor">
+            <div class="cf-editor-bar">
+              <span class="cf-dirty-dot" id="cf-dirty"></span>
+              <div class="cf-breadcrumb" id="cf-breadcrumb">
+                <span class="cf-breadcrumb-seg">.claude</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                <div class="cf-mode-tabs" id="cf-mode-tabs" style="display:none">
+                  <button class="cf-mode-btn active" data-mode="view">Preview</button>
+                  <button class="cf-mode-btn" data-mode="edit">Edit</button>
+                </div>
+                <span class="cf-save-status" id="cf-status"></span>
+                <button class="cf-save-btn" id="cf-save-btn" style="display:none" disabled>Save</button>
+              </div>
+            </div>
+            <div class="cf-editor-wrap">
+              <div class="cf-view-pane" id="cf-view-pane" style="align-items:center;justify-content:center">
+                <span style="color:var(--muted);font-size:12px">Select a file from the tree to view it</span>
+              </div>
+              <div class="cf-edit-pane" id="cf-edit-pane" style="display:none">
+                <div class="cf-line-nums" id="cf-line-nums"></div>
+                <textarea class="cf-textarea" id="cf-textarea" spellcheck="false"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+      document.getElementById('cf-save-btn').addEventListener('click', saveCfFile);
+      document.querySelectorAll('.cf-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchCfMode(btn.dataset.mode));
+      });
+      const ta = document.getElementById('cf-textarea');
+      ta.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveCfFile(); }
+      });
+      ta.addEventListener('input', () => {
+        const dot = document.getElementById('cf-dirty');
+        if (dot) dot.classList.add('visible');
+        const s = document.getElementById('cf-status');
+        if (s) { s.textContent = ''; s.className = 'cf-save-status'; }
+        updateLineNums(ta);
+      });
+      ta.addEventListener('scroll', () => {
+        const ln = document.getElementById('cf-line-nums');
+        if (ln) ln.scrollTop = ta.scrollTop;
+      });
+
+      if (cfTree) {
+        renderCfTree();
+      } else {
+        fetch('/api/claude-files')
+          .then(r => r.json())
+          .then(tree => { cfTree = tree; renderCfTree(); })
+          .catch(() => {
+            const bodyEl = document.getElementById('cf-tree-body');
+            if (bodyEl) bodyEl.innerHTML = '<span style="color:var(--danger);padding:12px;display:block;font-size:12px">Failed to load</span>';
+          });
+      }
+    }
+
+    function renderCfTree() {
+      const bodyEl = document.getElementById('cf-tree-body');
+      if (!bodyEl || !cfTree) return;
+      bodyEl.innerHTML = buildTreeHtml(cfTree, 0);
+      bodyEl.querySelectorAll('.cf-tree-node').forEach(el => {
+        el.addEventListener('click', () => {
+          if (el.dataset.type === 'dir') {
+            const p = el.dataset.path;
+            if (cfExpandedDirs.has(p)) cfExpandedDirs.delete(p); else cfExpandedDirs.add(p);
+            renderCfTree();
+          } else {
+            loadCfFile(el.dataset.path);
+          }
+        });
+      });
+    }
+
+    function buildTreeHtml(nodes, depth) {
+      let html = '';
+      for (const node of nodes) {
+        const pl = `padding-left:${10 + depth * 16}px`;
+        if (node.type === 'dir') {
+          const open = cfExpandedDirs.has(node.path);
+          html += `<div class="cf-tree-node cf-dir" data-path="${esc(node.path)}" data-type="dir" style="${pl}">
+            <span class="cf-node-chevron">${open ? '▾' : '▸'}</span>
+            <span class="cf-node-name">${esc(node.name)}</span>
+          </div>`;
+          if (open && node.children) html += buildTreeHtml(node.children, depth + 1);
+        } else {
+          const ext = node.name.includes('.') ? node.name.split('.').pop().toLowerCase() : '';
+          const sel = node.path === cfSelectedPath ? ' cf-selected' : '';
+          html += `<div class="cf-tree-node${sel}" data-path="${esc(node.path)}" data-type="file" data-ext="${esc(ext)}" style="${pl}">
+            <span class="cf-node-dot"></span>
+            <span class="cf-node-name">${esc(node.name)}</span>
+          </div>`;
+        }
+      }
+      return html;
+    }
+
+    async function loadCfFile(filePath) {
+      cfSelectedPath = filePath;
+      cfViewMode = 'view';
+      renderCfTree();
+      updateBreadcrumb(filePath);
+
+      const dot = document.getElementById('cf-dirty');
+      const statusEl = document.getElementById('cf-status');
+      const saveBtn = document.getElementById('cf-save-btn');
+      const modeTabs = document.getElementById('cf-mode-tabs');
+      const viewPane = document.getElementById('cf-view-pane');
+      const editPane = document.getElementById('cf-edit-pane');
+      const ta = document.getElementById('cf-textarea');
+
+      if (dot) dot.classList.remove('visible');
+      if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cf-save-status'; }
+      if (modeTabs) modeTabs.style.display = 'none';
+      if (saveBtn) { saveBtn.style.display = 'none'; saveBtn.disabled = true; }
+      if (editPane) editPane.style.display = 'none';
+      if (viewPane) {
+        viewPane.style.display = '';
+        viewPane.style.alignItems = '';
+        viewPane.style.justifyContent = '';
+        viewPane.innerHTML = '<div style="padding:24px;color:var(--muted);font-size:12px;font-style:italic">Loading…</div>';
+      }
+
+      try {
+        const res = await fetch('/api/claude-files/' + filePath);
+        if (!res.ok) throw new Error('not found');
+        const content = await res.text();
+
+        // Store raw content in textarea for editing
+        if (ta) ta.value = content;
+
+        // Render in view mode
+        const ext = filePath.includes('.') ? filePath.split('.').pop().toLowerCase() : '';
+        renderCfView(content, ext);
+
+        // Show controls
+        if (modeTabs) {
+          modeTabs.style.display = '';
+          const viewBtn = modeTabs.querySelector('[data-mode="view"]');
+          const editBtn = modeTabs.querySelector('[data-mode="edit"]');
+          if (viewBtn) viewBtn.textContent = ext === 'md' ? 'Preview' : 'View';
+          if (editBtn) editBtn.textContent = 'Edit';
+          modeTabs.querySelectorAll('.cf-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'view'));
+        }
+        if (saveBtn) { saveBtn.style.display = ''; saveBtn.disabled = true; }
+
+      } catch {
+        if (viewPane) viewPane.innerHTML = '<div style="padding:24px;color:var(--danger);font-size:12px">Failed to load file.</div>';
+      }
+    }
+
+    function renderCfView(content, ext) {
+      const viewPane = document.getElementById('cf-view-pane');
+      if (!viewPane) return;
+      if (ext === 'md') {
+        viewPane.innerHTML = `<div class="markdown-wrap"><div class="markdown-body">${marked.parse(content)}</div></div>`;
+        const body = viewPane.querySelector('.markdown-body');
+        if (body) Array.from(body.children).forEach(el => el.classList.add('in-view'));
+      } else {
+        const lang = extToLang(ext);
+        viewPane.innerHTML = `<div class="cf-code-wrap"><pre><code class="${lang ? 'language-' + lang : ''}">${esc(content)}</code></pre></div>`;
+        const codeEl = viewPane.querySelector('code');
+        if (codeEl && window.hljs && lang) hljs.highlightElement(codeEl);
+      }
+    }
+
+    function switchCfMode(mode) {
+      cfViewMode = mode;
+      const viewPane = document.getElementById('cf-view-pane');
+      const editPane = document.getElementById('cf-edit-pane');
+      const saveBtn = document.getElementById('cf-save-btn');
+      const ta = document.getElementById('cf-textarea');
+      const ln = document.getElementById('cf-line-nums');
+
+      document.querySelectorAll('.cf-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+      if (mode === 'view') {
+        if (editPane) editPane.style.display = 'none';
+        if (viewPane) viewPane.style.display = '';
+        if (saveBtn) saveBtn.disabled = true;
+        // Re-render from current textarea content (live preview)
+        if (ta && cfSelectedPath) {
+          const ext = cfSelectedPath.includes('.') ? cfSelectedPath.split('.').pop().toLowerCase() : '';
+          renderCfView(ta.value, ext);
+        }
+      } else {
+        if (viewPane) viewPane.style.display = 'none';
+        if (editPane) editPane.style.display = '';
+        if (saveBtn) saveBtn.disabled = false;
+        if (ta && ln) { updateLineNums(ta); ln.scrollTop = ta.scrollTop; }
+        ta?.focus();
+      }
+    }
+
+    function extToLang(ext) {
+      const map = { ts: 'typescript', js: 'javascript', cjs: 'javascript', mjs: 'javascript', json: 'json', md: 'markdown', sh: 'bash', bat: 'batch' };
+      return map[ext] || '';
+    }
+
+    async function saveCfFile() {
+      if (!cfSelectedPath) return;
+      const ta = document.getElementById('cf-textarea');
+      const statusEl = document.getElementById('cf-status');
+      const saveBtn = document.getElementById('cf-save-btn');
+      if (!ta || !statusEl) return;
+      if (saveBtn) saveBtn.disabled = true;
+      statusEl.textContent = 'Saving…'; statusEl.className = 'cf-save-status';
+      try {
+        const res = await fetch('/api/claude-files/' + cfSelectedPath, {
+          method: 'PUT', body: ta.value, headers: { 'Content-Type': 'text/plain' }
+        });
+        if (!res.ok) throw new Error('save failed');
+        const dot = document.getElementById('cf-dirty');
+        if (dot) dot.classList.remove('visible');
+        statusEl.textContent = 'Saved ✓'; statusEl.className = 'cf-save-status ok';
+        if (cfSaveTimer) clearTimeout(cfSaveTimer);
+        cfSaveTimer = setTimeout(() => {
+          const s = document.getElementById('cf-status');
+          if (s) { s.textContent = ''; s.className = 'cf-save-status'; }
+        }, 2500);
+      } catch {
+        statusEl.textContent = 'Save failed'; statusEl.className = 'cf-save-status err';
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
+    function updateBreadcrumb(filePath) {
+      const el = document.getElementById('cf-breadcrumb');
+      if (!el) return;
+      const segs = filePath ? ['.claude', ...filePath.split('/')] : ['.claude'];
+      el.innerHTML = segs.map((seg, i) => {
+        const isLast = i === segs.length - 1;
+        const sep = i > 0 ? '<span class="cf-breadcrumb-sep">›</span>' : '';
+        return `${sep}<span class="cf-breadcrumb-seg${isLast ? ' cf-crumb-last' : ''}">${esc(seg)}</span>`;
+      }).join('');
+    }
+
+    function updateLineNums(ta) {
+      const ln = document.getElementById('cf-line-nums');
+      if (!ln || !ta) return;
+      const count = ta.value ? ta.value.split('\n').length : 1;
+      ln.textContent = Array.from({length: count}, (_, i) => i + 1).join('\n');
+      ln.scrollTop = ta.scrollTop;
+    }
+
+    initFilterBar();
+    fetchReviews();
+    setInterval(fetchReviews, 5000);
+  </script>
+</body>
+</html>

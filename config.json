@@ -1,11 +1,21 @@
 {
   "repos": [
-    "markhughes321/gthub-server"
+    "KaseyaOne/kaseya-one-auto-tests"
   ],
+  "repoLocalPaths": {
+    "KaseyaOne/kaseya-one-auto-tests": "C:/Users/k-mark.hughes/Repos/kaseya-one-auto-tests"
+  },
   "pollIntervalSeconds": 300,
-  "reviewModel": "sonnet",
-  "maxBudgetUsd": 0.50,
-  "confidenceThreshold": 80,
-  "postCommentToPr": false,
-  "notify": true
+  "reviewModel": "claude-opus-4-6",
+  "notify": true,
+  "teamReviewThreshold": 10,
+  "reviewTimeoutMinutes": 15,
+  "parallelReviews": false,
+  "maxConcurrentReviews": 3,
+  "skillMap": {
+    "API": "api-500-hunter",
+    "UI": "pr-review",
+    "INFRA": "pr-review",
+    "MIXED": "pr-review-team"
+  }
 }
